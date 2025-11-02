@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask
 import threading
+from moviepy.editor import VideoFileClip
 
 app = Flask("")
 @app.route("/")
@@ -20,7 +21,6 @@ threading.Thread(target=run).start()
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-APYHUB_TOKEN = os.getenv("APYHUB_API")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -39,19 +39,24 @@ bot = commands.Bot(
     ),
 )
 
-API_URL = "https://api.apyhub.com/generate/gif/file"
-
 async def video2gif(file: discord.Attachment):
     video_bytes = await file.read()
-    async with aiohttp.ClientSession() as session:
-        form = aiohttp.FormData()
-        form.add_field("video", video_bytes, filename=file.filename, content_type="video/mp4")
-        headers = {"apy-token": APYHUB_TOKEN}
-        async with session.post(API_URL, data=form, headers=headers) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                return f"Conversion failed for {file.filename}: {text}"
-            return await resp.read()
+    temp_input = f"temp_{file.filename}"
+    temp_output = f"{file.filename.rsplit('.',1)[0]}.gif"
+    
+    with open(temp_input, "wb") as f:
+        f.write(video_bytes)
+
+    clip = VideoFileClip(temp_input)
+    clip.write_gif(temp_output, program='ffmpeg')  # full video
+    clip.close()
+    
+    with open(temp_output, "rb") as f:
+        gif_bytes = f.read()
+
+    os.remove(temp_input)
+    os.remove(temp_output)
+    return gif_bytes
 
 @app_commands.command(name="videotogif", description="Convert video(s) to GIF")
 @app_commands.describe(
@@ -64,10 +69,7 @@ async def videotogif(interaction: discord.Interaction, file1: discord.Attachment
     await interaction.response.send_message(f"Processing {len(files)} video(s)...", ephemeral=True)
     results = await asyncio.gather(*[video2gif(f) for f in files])
     for f, res in zip(files, results):
-        if isinstance(res, bytes):
-            await interaction.followup.send(file=discord.File(fp=io.BytesIO(res), filename=f"{f.filename.rsplit('.',1)[0]}.gif"))
-        else:
-            await interaction.followup.send(res, ephemeral=True)
+        await interaction.followup.send(file=discord.File(fp=io.BytesIO(res), filename=f"{f.filename.rsplit('.',1)[0]}.gif"))
 
 bot.tree.add_command(videotogif)
 
