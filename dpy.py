@@ -7,6 +7,7 @@ import io
 import os
 from dotenv import load_dotenv
 from flask import Flask
+from typing import List
 import threading
 
 
@@ -60,9 +61,11 @@ async def video2gif(file: discord.Attachment):
         return f"Error processing video: {e}"
 
 
-@bot.tree.command(name="videotogif", description="convert video2gif")
+from typing import List
+
+@bot.tree.command(name="videotogif", description="Convert video(s) to GIF")
 @app_commands.describe(files="Upload one or more video files")
-async def videotogif(interaction: discord.Interaction, files: commands.Greedy[discord.Attachment]):
+async def videotogif(interaction: discord.Interaction, files: List[discord.Attachment]):
     if not files:
         await interaction.response.send_message("Please attach at least one video file", ephemeral=True)
         return
@@ -74,9 +77,12 @@ async def videotogif(interaction: discord.Interaction, files: commands.Greedy[di
 
     for i, result in enumerate(results):
         if isinstance(result, bytes):
-            await interaction.followup.send(file=discord.File(fp=io.BytesIO(result), filename=f"{files[i].filename.rsplit('.',1)[0]}.gif"))
-        else:    
+            await interaction.followup.send(
+                file=discord.File(fp=io.BytesIO(result), filename=f"{files[i].filename.rsplit('.',1)[0]}.gif")
+            )
+        else:
             await interaction.followup.send(result, ephemeral=True)
+
 
 
 @bot.event
