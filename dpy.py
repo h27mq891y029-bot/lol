@@ -8,7 +8,6 @@ import os
 from dotenv import load_dotenv
 from flask import Flask
 import threading
-from bs4 import BeautifulSoup
 
 app = Flask("")
 @app.route("/")
@@ -21,6 +20,7 @@ threading.Thread(target=run).start()
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GIPHY_API = os.getenv("GIPHY_API")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -39,29 +39,25 @@ bot = commands.Bot(
     ),
 )
 
-EZGIF_UPLOAD_URL = "https://s3.ezgif.com/upload-video"
+GIPHY_UPLOAD_URL = "https://upload.giphy.com/v1/gifs"
 
-async def video2gif(file: discord.Attachment):
+async def upload_to_giphy(file: discord.Attachment):
     video_bytes = await file.read()
     filename = file.filename
-    headers = {"User-Agent": "Mozilla/5.0"}
     data = aiohttp.FormData()
-    data.add_field("new", video_bytes, filename=filename, content_type="video/mp4")
+    data.add_field("file", video_bytes, filename=filename, content_type="video/mp4")
+    data.add_field("api_key", GIPHY_API)
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(EZGIF_UPLOAD_URL, data=data, headers=headers) as resp:
+        async with session.post(GIPHY_UPLOAD_URL, data=data) as resp:
             if resp.status != 200:
-                return f"Upload failed for {filename}: {resp.status}"
-            html = await resp.text()
-            soup = BeautifulSoup(html, "html.parser")
-            gif_form = soup.find("form", {"id": "tool-submit-form"})
-            if not gif_form:
-                return f"Failed to parse EZGIF response for {filename}"
-            gif_url_input = gif_form.find("input", {"name": "file"})
-            if not gif_url_input:
+                text = await resp.text()
+                return f"Upload failed for {filename}: {text}"
+            json_resp = await resp.json()
+            gif_id = json_resp.get("data", {}).get("id")
+            if not gif_id:
                 return f"Failed to get GIF URL for {filename}"
-            gif_file = gif_url_input["value"]
-            return f"https://ezgif.com/{gif_file}"
+            return f"https://media.giphy.com/media/{gif_id}/giphy.gif"
 
 @app_commands.command(name="videotogif", description="Convert video(s) to GIF")
 @app_commands.describe(
@@ -70,9 +66,9 @@ async def video2gif(file: discord.Attachment):
     file3="Video file 3 (optional)"
 )
 async def videotogif(interaction: discord.Interaction, file1: discord.Attachment, file2: discord.Attachment=None, file3: discord.Attachment=None):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.send_message(f"Processing {len([f for f in (file1, file2, file3) if f])} video(s)...", ephemeral=True)
     files = [f for f in (file1, file2, file3) if f]
-    tasks = [video2gif(f) for f in files]
+    tasks = [upload_to_giphy(f) for f in files]
     results = await asyncio.gather(*tasks)
     for f, res in zip(files, results):
         await interaction.followup.send(f"{f.filename}: {res}")
