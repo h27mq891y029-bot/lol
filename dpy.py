@@ -3,7 +3,6 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 import asyncio
-import io
 import os
 from dotenv import load_dotenv
 from flask import Flask
@@ -68,10 +67,9 @@ async def upload_to_giphy(file: discord.Attachment):
 async def videotogif(interaction: discord.Interaction, file1: discord.Attachment, file2: discord.Attachment=None, file3: discord.Attachment=None):
     await interaction.response.send_message(f"Processing {len([f for f in (file1, file2, file3) if f])} video(s)...", ephemeral=True)
     files = [f for f in (file1, file2, file3) if f]
-    tasks = [upload_to_giphy(f) for f in files]
-    results = await asyncio.gather(*tasks)
-    for f, res in zip(files, results):
-        await interaction.followup.send(f"{f.filename}: {res}")
+    results = await asyncio.gather(*[upload_to_giphy(f) for f in files])
+    for res in results:
+        await interaction.followup.send(res)
 
 bot.tree.add_command(videotogif)
 
