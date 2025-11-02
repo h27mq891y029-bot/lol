@@ -22,7 +22,7 @@ threading.Thread(target=run).start()
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-APYHUB_TOKEN = os.getenv("APYHUB_TOKEN")
+APYHUB_TOKEN = os.getenv("APYHUB_API")
 
 
 
