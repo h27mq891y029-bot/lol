@@ -1,7 +1,4 @@
 discord.py
-requests
-python-dotenv
-flask
-moviepy
-imageio[ffmpeg]
 aiohttp
+Flask
+python-dotenv
