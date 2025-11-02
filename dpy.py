@@ -1,71 +1,88 @@
+import discord
 from discord import app_commands
 from discord.ext import commands
-import discord
-import requests
+import aiohttp
+import asyncio
+import io
 import os
 from dotenv import load_dotenv
 from flask import Flask
 import threading
 
-app = Flask("")
 
+app = Flask("")
 @app.route("/")
 def home():
-    return "Hi uptimerobot"
+    return "lol"
 
 def run():
     app.run(host="0.0.0.0", port=8080)
-
 threading.Thread(target=run).start()
 
-load_dotenv()
-TOKEN = os.getenv("DISCORD_TOKEN")
-GIPHY_API = os.getenv("GIPHY_API")
 
-GIPHY_UPLOAD_URL = "https://upload.giphy.com/v1/gifs"
+load_dotenv()
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+APYHUB_TOKEN = os.getenv("APYHUB_TOKEN")
+
 
 
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(
-    command_prefix=".", intents=intents,
-    allowed_contexts=discord.app_commands.AppCommandContext(guild=True, dm_channel=True, private_channel=True),
-    allowed_installs=discord.app_commands.AppInstallationType(guild=True, user=True),
-    )
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+API_URL = "https://api.apyhub.com/generate/gif/file"
+
+
+async def video2gif(file: discord.Attachment):
+
+    try:
+        video_bytes = await file.read()
+        filename = file.filename
+
+        async with aiohttp.ClientSession() as session:
+            form = aiohttp.FormData()
+            form.add_field("video", video_bytes, filename=filename, content_type="video/mp4")
+
+            headers = {
+                "apy-token": APYHUB_TOKEN
+            }
+
+            async with session.post(API_URL, data=form, headers=headers) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    return "Conversion failed"
+                
+                gif_bytes = await resp.read()
+                return gif_bytes
+
+    except Exception as e:
+        return f"Error processing video: {e}"
+
+
+@bot.tree.command(name="videotogif", description="convert video2gif")
+@app_commands.describe(files="Upload one or more video files")
+async def videotogif(interaction: discord.Interaction, files: commands.Greedy[discord.Attachment]):
+    if not files:
+        await interaction.response.send_message("Please attach at least one video file", ephemeral=True)
+        return
+
+    await interaction.response.send_message(f"Processing {len(files)} video(s)…", ephemeral=True)
+
+    tasks = [video2gif(f) for f in files]
+    results = await asyncio.gather(*tasks)
+
+    for i, result in enumerate(results):
+        if isinstance(result, bytes):
+            await interaction.followup.send(file=discord.File(fp=io.BytesIO(result), filename=f"{files[i].filename.rsplit('.',1)[0]}.gif"))
+        else:    
+            await interaction.followup.send(result, ephemeral=True)
+
 
 @bot.event
 async def on_ready():
     print(f"[+] Logged in as {bot.user}")
     await bot.tree.sync()
-    print("Commands synced.")
+    print("[+] Slash commands synced.")
 
-@app_commands.command(name="videotogif", description="Video2Gif conversion")
-@app_commands.describe(file="MP4 video file to convert")
-async def videotogif(interaction: discord.Interaction, file: discord.Attachment):
-    await interaction.response.send_message("Processing and Uploading.", ephemeral=True)
-
-    try:
-        video_bytes = await file.read()
-
-        response = requests.post(
-            GIPHY_UPLOAD_URL,
-            data={"api_key": GIPHY_API},
-            files={"file": (file.filename, video_bytes, "video/mp4")}
-        )
-        response.raise_for_status()
-
-        gif_id = response.json().get("data", {}).get("id")
-        if not gif_id:
-            await interaction.followup.send("Failed to create GIF.", ephemeral=True)
-            return
-
-        gif_url = f"https://media.giphy.com/media/{gif_id}/giphy.gif"
-        await interaction.followup.send(f"{gif_url}")
-
-    except Exception as e:
-        await interaction.followup.send(f"Error: {e}", ephemeral=True)
-
-
-bot.tree.add_command(videotogif)
-bot.run(TOKEN)
+bot.run(DISCORD_TOKEN)
