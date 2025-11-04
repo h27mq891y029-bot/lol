@@ -39,26 +39,28 @@ async def upload_to_tenor(video_url: str) -> str:
         return f"Download error: {str(e)}"
 
     form_data = aiohttp.FormData()
-    form_data.add_field("file", video_bytes, filename="video.mp4", content_type="video/mp4")
     form_data.add_field("key", TENOR_API_KEY)
+    form_data.add_field("file", video_bytes, filename="video.mp4", content_type="video/mp4")
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(TENOR_UPLOAD_URL, data=form_data, timeout=120) as resp:
+                text = await resp.text()
+                if resp.status == 401:
+                    return f"401 Unauthorized. Full response: {text[:200]}"
                 if resp.status != 200:
-                    text = await resp.text()
-                    return f"Upload failed ({resp.status}): {text[:100]}"
+                    return f"Upload failed ({resp.status}): {text[:200]}"
                 result = await resp.json()
                 gif_id = result.get("media", [{}])[0].get("id")
                 if not gif_id:
-                    return "No GIF created."
+                    return f"No GIF created. Response: {text[:200]}"
                 return f"https://tenor.com/view/{gif_id}"
     except Exception as e:
         return f"Upload error: {str(e)}"
 
 @app_commands.command(name="urltogif", description="Convert up to 3 video URLs to Tenor GIFs")
 @app_commands.describe(
-    url1="Video URL 1 (mp4, mov, webm)",
+    url1="Video URL 1",
     url2="Video URL 2 (optional)",
     url3="Video URL 3 (optional)"
 )
