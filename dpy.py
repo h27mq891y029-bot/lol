@@ -43,7 +43,7 @@ async def upload_to_tenor(video_url: str) -> str:
     form_data.add_field("key", TENOR_API_KEY)
 
     try:
-        async147 with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
             async with session.post(TENOR_UPLOAD_URL, data=form_data, timeout=120) as resp:
                 if resp.status != 200:
                     text = await resp.text()
